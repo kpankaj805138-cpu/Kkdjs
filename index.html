@@ -1,0 +1,222 @@
+
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JARVIS AI Assistant</title>
+<style>
+*{box-sizing:border-box}
+body{
+  margin:0;min-height:100vh;background:#020916;color:#00d9ff;
+  font-family:Arial,sans-serif;display:flex;justify-content:center;
+  align-items:center;padding:18px;
+}
+.app{width:100%;max-width:600px;text-align:center}
+h1{letter-spacing:7px;font-size:36px;text-shadow:0 0 18px #00bfff}
+.sub{color:#80dfff;letter-spacing:3px}
+.arc{
+  width:190px;height:190px;margin:28px auto;border-radius:50%;
+  border:3px solid #00cfff;display:flex;align-items:center;
+  justify-content:center;box-shadow:0 0 22px #008cff,inset 0 0 25px #0066aa;
+  animation:pulse 2s infinite;
+}
+.arc span{font-size:64px;font-weight:bold;text-shadow:0 0 20px #00cfff}
+@keyframes pulse{50%{box-shadow:0 0 40px #00cfff,inset 0 0 35px #0066aa}}
+.status{min-height:28px;color:#fff;margin:15px 0}
+button{
+  background:#062c49;color:#00eaff;border:1px solid #00bfff;
+  border-radius:9px;padding:13px 17px;margin:5px;cursor:pointer;
+  font-size:15px;
+}
+button:hover{background:#07517a}
+input{
+  width:100%;padding:14px;background:#061629;color:white;
+  border:1px solid #00bfff;border-radius:8px;font-size:16px;
+}
+.controls{margin:15px 0}
+#log{
+  margin-top:20px;background:#061323;border:1px solid #064b6a;
+  padding:14px;border-radius:10px;text-align:left;min-height:90px;
+  color:#d8f7ff;white-space:pre-wrap;overflow-wrap:anywhere;
+}
+video{width:100%;max-height:280px;margin-top:15px;border-radius:10px;display:none}
+.note{font-size:12px;color:#8cb7c9;margin-top:18px;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>J.A.R.V.I.S</h1>
+  <div class="sub">PERSONAL AI ASSISTANT</div>
+
+  <div class="arc"><span>J</span></div>
+  <div id="status" class="status">सिस्टम तैयार है।</div>
+
+  <div class="controls">
+    <button onclick="startListening()">🎙️ बोलकर बात करें</button>
+    <button onclick="stopListening()">⏹ बंद करें</button>
+    <button onclick="speak('नमस्ते! मैं जार्विस हूँ। बताइए, मैं आपकी क्या मदद करूँ?')">🔊 JARVIS बोलें</button>
+  </div>
+
+  <input id="command" placeholder="यहाँ अपना कमांड लिखें..." />
+  <button onclick="sendCommand()">कमांड भेजें</button>
+
+  <div class="controls">
+    <button onclick="openCamera()">📷 कैमरा खोलें</button>
+    <button onclick="closeCamera()">कैमरा बंद करें</button>
+  </div>
+
+  <video id="camera" autoplay playsinline muted></video>
+  <div id="log">JARVIS: नमस्ते! मैं आपकी मदद के लिए तैयार हूँ।</div>
+
+  <div class="note">
+    वॉइस फीचर के लिए माइक्रोफोन अनुमति दें। कैमरे के लिए HTTPS या localhost जरूरी हो सकता है।
+    यह स्टैंडअलोन डेमो है; इसमें अपने-आप ChatGPT जैसी AI या फोन के निजी नोटिफिकेशन पढ़ने की सुविधा शामिल नहीं है।
+  </div>
+</div>
+
+<script>
+const statusEl = document.getElementById("status");
+const logEl = document.getElementById("log");
+const commandEl = document.getElementById("command");
+const camera = document.getElementById("camera");
+let recognition = null;
+let cameraStream = null;
+
+function speak(text) {
+  if (!("speechSynthesis" in window)) {
+    statusEl.textContent = "इस ब्राउज़र में वॉइस सपोर्ट उपलब्ध नहीं है।";
+    return;
+  }
+  speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "hi-IN";
+  utterance.rate = 0.95;
+  utterance.pitch = 1;
+  utterance.onstart = () => statusEl.textContent = "JARVIS बोल रहा है...";
+  utterance.onend = () => statusEl.textContent = "सिस्टम तैयार है।";
+  speechSynthesis.speak(utterance);
+}
+
+function showMessage(user, answer) {
+  logEl.textContent = "आप: " + user + "\nJARVIS: " + answer;
+}
+
+function startListening() {
+  const SpeechRecognition =
+    window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if (!SpeechRecognition) {
+    speak("आपके ब्राउज़र में वॉइस पहचान उपलब्ध नहीं है। कृपया Chrome का उपयोग करें।");
+    return;
+  }
+
+  recognition = new SpeechRecognition();
+  recognition.lang = "hi-IN";
+  recognition.continuous = false;
+  recognition.interimResults = false;
+
+  recognition.onstart = () => statusEl.textContent = "सुन रहा हूँ...";
+  recognition.onresult = event => {
+    const text = event.results[0][0].transcript;
+    commandEl.value = text;
+    processCommand(text);
+  };
+  recognition.onerror = () => statusEl.textContent =
+    "आवाज़ नहीं मिली। माइक्रोफोन अनुमति जाँचें।";
+  recognition.onend = () => {
+    if (statusEl.textContent === "सुन रहा हूँ...") {
+      statusEl.textContent = "सिस्टम तैयार है।";
+    }
+  };
+
+  try { recognition.start(); }
+  catch (error) { statusEl.textContent = "वॉइस पहले से सक्रिय हो सकती है।"; }
+}
+
+function stopListening() {
+  if (recognition) recognition.stop();
+  speechSynthesis.cancel();
+  statusEl.textContent = "वॉइस बंद है।";
+}
+
+function sendCommand() {
+  const text = commandEl.value.trim();
+  if (text) processCommand(text);
+}
+
+function processCommand(raw) {
+  const text = raw.toLowerCase().trim();
+  let answer = "";
+
+  if (text.includes("नमस्ते") || text.includes("hello") || text.includes("हेलो")) {
+    answer = "नमस्ते! बताइए, मैं आपकी क्या मदद कर सकता हूँ?";
+  } else if (text.includes("समय") || text.includes("time")) {
+    answer = "अभी समय है " + new Date().toLocaleTimeString("hi-IN");
+  } else if (text.includes("तारीख") || text.includes("date")) {
+    answer = "आज की तारीख है " +
+      new Date().toLocaleDateString("hi-IN", {
+        day:"numeric", month:"long", year:"numeric"
+      });
+  } else if (text.includes("यूट्यूब") || text.includes("youtube")) {
+    answer = "यूट्यूब खोल रहा हूँ।";
+    showMessage(raw, answer);
+    speak(answer);
+    window.open("https://www.youtube.com/", "_blank", "noopener");
+    return;
+  } else if (text.includes("गूगल") || text.includes("google")) {
+    answer = "गूगल खोल रहा हूँ।";
+    showMessage(raw, answer);
+    speak(answer);
+    window.open("https://www.google.com/", "_blank", "noopener");
+    return;
+  } else if (text.includes("कैमरा")) {
+    answer = "कैमरा चालू करने की कोशिश कर रहा हूँ।";
+    openCamera();
+  } else if (text.includes("तुम कौन") || text.includes("तुम्हारा नाम")) {
+    answer = "मैं जार्विस हूँ, आपका ब्राउज़र असिस्टेंट।";
+  } else if (text.includes("बंद हो") || text.includes("अलविदा")) {
+    answer = "ठीक है। जब भी जरूरत हो, मुझे बुलाइए।";
+  } else {
+    answer = "मैंने आपका कमांड सुना: " + raw +
+      "। इस बेसिक वर्जन में सीमित कमांड उपलब्ध हैं।";
+  }
+
+  showMessage(raw, answer);
+  speak(answer);
+}
+
+async function openCamera() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    statusEl.textContent = "कैमरा के लिए HTTPS या समर्थित ब्राउज़र जरूरी है।";
+    return;
+  }
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment" }, audio: false
+    });
+    camera.srcObject = cameraStream;
+    camera.style.display = "block";
+    statusEl.textContent = "कैमरा चालू है।";
+  } catch (error) {
+    statusEl.textContent = "कैमरा अनुमति नहीं मिली या कैमरा उपलब्ध नहीं है।";
+  }
+}
+
+function closeCamera() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(track => track.stop());
+    cameraStream = null;
+  }
+  camera.srcObject = null;
+  camera.style.display = "none";
+  statusEl.textContent = "कैमरा बंद है।";
+}
+
+commandEl.addEventListener("keydown", event => {
+  if (event.key === "Enter") sendCommand();
+});
+</script>
+</body>
+    </html>
+    
